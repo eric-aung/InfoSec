@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Screener</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+            background-color: #f9f9f9;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #fff;
+        }
+
+        li {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+
+        li:last-child {
+            border-bottom: none;
+        }
+
+        li:hover {
+            background-color: #f0f0f0;
+        }
+
+        .result {
+            margin-top: 20px;
+            background-color: #fff;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        #loading {
+            text-align: center;
+            color: #007bff;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Stock Screener</h1>
+        <input type="text" id="searchBox" placeholder="Search for a stock (e.g., IBM)...">
+        <div id="loading" style="display: none;">Loading...</div>
+        <ul id="suggestions"></ul>
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        const apiKey = ""; //YOU NEED TO CHANGE THIS APIKEY
+        const searchBox = document.getElementById("searchBox");
+        const suggestions = document.getElementById("suggestions");
+        const result = document.getElementById("result");
+        const loading = document.getElementById("loading");
+        let debounceTimer;
+
+        searchBox.addEventListener("input", () => {
+            const query = searchBox.value.trim();
+            if (query.length < 2) {
+                suggestions.innerHTML = "";
+                result.innerHTML = "";
+                return;
+            }
+
+            clearTimeout(debounceTimer);
+
+            debounceTimer = setTimeout(() => {
+                fetchSuggestions(query);
+            }, 300); // Wait for 300ms after the user stops typing
+        });
+
+        async function fetchSuggestions(query) {
+            loading.style.display = "block";
+            const searchUrl = `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${query}&apikey=${apiKey}`;
+            try {
+                const response = await fetch(searchUrl);
+                const data = await response.json();
+                const matches = data.bestMatches;
+
+                if (matches && matches.length > 0) {
+                    suggestions.innerHTML = matches
+                        .slice(0, 5) // Limit to 5 results
+                        .map(match => `<li data-symbol="${match["1. symbol"]}" data-name="${match["2. name"]}" data-region="${match["4. region"]}">${match["2. name"]} (${match["1. symbol"]})</li>`)
+                        .join("\n");
+                } else {
+                    suggestions.innerHTML = `<li>No matches found</li>`;
+                }
+            } catch (error) {
+                console.error("Error fetching data:", error);
+            } finally {
+                loading.style.display = "none";
+            }
+        }
+
+        suggestions.addEventListener("click", async (e) => {
+            if (e.target.tagName === "LI") {
+                const symbol = e.target.dataset.symbol;
+                const name = e.target.dataset.name;
+                const region = e.target.dataset.region;
+
+                loading.style.display = "block";
+                const priceUrl = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
+
+                try {
+                    const response = await fetch(priceUrl);
+                    const data = await response.json();
+                    const priceInfo = data["Global Quote"];
+
+                    result.innerHTML = `
+                        <h3>Selected Stock</h3>
+                        <p><strong>Symbol:</strong> ${symbol}</p>
+                        <p><strong>Name:</strong> ${name}</p>
+                        <p><strong>Region:</strong> ${region}</p>
+                        <p><strong>Price:</strong> ${priceInfo ? priceInfo["05. price"] : "N/A"}</p>
+                        <p><strong>Change:</strong> ${priceInfo ? priceInfo["09. change"] : "N/A"}</p>
+                        <p><strong>Change Percent:</strong> ${priceInfo ? priceInfo["10. change percent"] : "N/A"}</p>
+                    `;
+                } catch (error) {
+                    console.error("Error fetching stock price:", error);
+                    result.innerHTML = `<p>Failed to fetch stock price. Please try again later.</p>`;
+                } finally {
+                    loading.style.display = "none";
+                }
+
+                searchBox.value = `${name} (${symbol})`;
+                suggestions.innerHTML = "";
+            }
+        });
+    </script>
+</body>
+</html>
